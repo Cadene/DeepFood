@@ -337,7 +337,7 @@ function dataset:sample(quantity)
    return data, scalarLabels
 end
 
-function dataset:get(i1, i2)
+function dataset:get(i1, i2, shuffle)
    local indices = torch.range(i1, i2);
    local quantity = i2 - i1 + 1;
    assert(quantity > 0)
@@ -346,10 +346,14 @@ function dataset:get(i1, i2)
    local scalarTable = {}
    for i=1,quantity do
       -- load the sample
-      local imgpath = ffi.string(torch.data(self.imagePath[indices[i]]))
+      local id = indices[i]
+      if shuffle then
+        id = shuffle[id]
+      end
+      local imgpath = ffi.string(torch.data(self.imagePath[id]))
       local out = self:sampleHook(imgpath)
       table.insert(dataTable, out)
-      table.insert(scalarTable, self.imageClass[indices[i]])
+      table.insert(scalarTable, self.imageClass[id])
    end
    local data, scalarLabels = tableToOutput(self, dataTable, scalarTable)
    return data, scalarLabels

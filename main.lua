@@ -29,37 +29,44 @@ local tmBatch = torch.Timer()
 -- Options
 
 cmd = torch.CmdLine()
+-- Training options
+-- cmd:option('-pretrain', 'yes', 'Options: yes (finetuning) | no (from scratch)')
+cmd:option('-threads', 1, 'Threads number (minimum 2)')
+cmd:option('-imageSize', 221, 'w and h of an image to load')
+cmd:option('-batchSize', 60, 'Size of a batch (60 for overfeat, 20 for vgg19)')
+cmd:option('-netType', 'overfeat', 'Options: overfeat | vgg16')
+-- Optimization options
 cmd:option('-lr',  8e-1, 'Learning Rate')
 cmd:option('-lrd', 3e-4, 'Learning Rate Decay')
 cmd:option('-wd',  1e-3, 'Weight Decay')
 cmd:option('-m',   0.6, 'Momentum')
 cmd:option('-lrf_conv', 10, 'lr will be divided by lrf_conv only for convolution layers')
-cmd:option('-pretrain', 'yes', 'Options: yes | no')
 opt = cmd:parse(arg or {})
 
+opt.idGPU = os.getenv('CUDA_VISIBLE_DEVICES')
 opt.cuda = true
-opt.batchSize = 60
 opt.nb_epoch = 60
 opt.seed = 1337
-opt.path2data = '/home/cadene/data/UPMC_Food101_221_augmented' -- images 3*221*221
+opt.path2data = '/home/cadene/data/UPMC_Food101_'..opt.imageSize..'_augmented'
 opt.save_model = false
-opt.path2cache = '/home/cadene/doc/A/cache'
-opt.path2save = '/home/cadene/doc/A/rslt_debug'
-opt.threads = 3
-
-opt.imageSize = 221
+opt.path2cache = '/home/cadene/doc/DeepFood/cache_'..opt.imageSize
+opt.path2save = '/home/cadene/doc/DeepFood/GPU'..opt.idGPU
+opt.path2networks = '/home/cadene/doc/DeepFood/networks'
+opt.path2model = opt.path2networks..'/'..opt.netType..'.lua'
 
 -------------------------------------
 -- Info
 
-idGPU = os.getenv('CUDA_VISIBLE_DEVICES')
-
 print("Lunching using pid = "..unistd.getpid().." on CPU")
-print("Lunching using GPU = "..idGPU)
+print("Lunching using GPU = "..opt.idGPU)
 print("Options : ", opt)
+
+print('Caching everything to: ' .. opt.path2cache)
+os.execute('mkdir -p ' .. opt.path2cache)
 
 print('Saving everything to: ' .. opt.path2save)
 os.execute('mkdir -p ' .. opt.path2save)
+
 os.execute('echo "'..unistd.getpid()..'" > '..opt.path2save..'/pid.log')
 os.execute('echo "'..os.date():gsub(' ','')..'" > '..opt.path2save..'/lunchdate.log')
 
@@ -76,78 +83,7 @@ if opt.cuda then
 end
 
 -------------------------------------
--- Dataset
-
--- function load_recipe101(path2data)
---     local path2esc = {'.', '..', '.DS_Store', '._.DS_Store'}
---     local path2train = path2data..'/train/'
---     local path2test  = path2data..'/test/'
---     local path2img, label = {}, {} -- all images names and label=[1,101]
---     local p2i_train, l_train = {}, {} -- only train
---     local p2i_test, l_test = {}, {}
---     local label2class = {} -- label (int) to class (string)
---     local is_in = function (string, path2esc)
---         for k, name in pairs(path2esc) do
---             if string == name then
---                 return true
---             end
---         end
---         return false
---     end
---     local label = 1
---     for _, class in pairs(paths.dir(path2train)) do
---         if not is_in(class, path2esc) then -- rm path2esc values
---             for _, path_img in pairs(paths.dir(path2train..class)) do
---                 if not is_in(path_img, path2esc) then
---                     path2img = paths.concat(path2train, class, path_img)
---                     table.insert(p2i_train, path2img)
---                     table.insert(l_train, label)
---                 end
---             end
---             label2class[label] = class
---             label = label + 1
---         end
---     end
---     label = 1
---     for _, class in pairs(paths.dir(path2test)) do
---         if not is_in(class, path2esc) then -- rm path2esc values
---             for _, path_img in pairs(paths.dir(path2test..class)) do
---                 if not is_in(path_img, path2esc) then
---                     path2img = paths.concat(path2test, class, path_img)
---                     table.insert(p2i_test, path2img)
---                     table.insert(l_test, label)
---                 end
---             end
---             label = label + 1
---         end
---     end
---     local trainset = {
---         path  = p2i_train,
---         label = l_train,
---         size  = #p2i_train
---     }
---     local testset = {
---         path  = p2i_test,
---         label = l_test,
---         size = #p2i_test
---     }
---     return trainset, testset, label2class
--- end
-
--- if paths.filep(opt.path2save..'/trainset.t7') then
---     trainset = torch.load(opt.path2save..'/trainset.t7')
---     testset  = torch.load(opt.path2save..'/testset.t7')
---     label2class = torch.load(opt.path2save..'/label2class.t7')
--- else
---     trainset, testset, label2class = load_recipe101(opt.path2data)
---     torch.save(opt.path2save..'/trainset.t7', trainset)
---     torch.save(opt.path2save..'/testset.t7', testset)
---     torch.save(opt.path2save..'/label2class.t7', label2class)
--- end
--- nb_class = #label2class
-
--------------------------------------
--- Threads
+-- Lunching Threads and recovering Datasets
 
 threads.serialization('threads.sharedserialize')
 do 
@@ -156,9 +92,8 @@ do
         pool = threads.Threads(
             opt.threads,
             function(thread_id)
-                print('Starting a new thread num ' .. thread_id)
+                print('Starting a new thread # ' .. thread_id)
                 require 'torch'
-                --require 'cutorch'
             end,
             function(thread_id)
                 opt = options
@@ -183,114 +118,22 @@ pool:addjob(function() return trainLoader:size() end, function(c) nTrain = c end
 pool:addjob(function() return testLoader:size() end, function(c) nTest = c end)
 pool:synchronize()
 nClasses = #classes
-
 print('nClasses: ', nClasses)
 print('nTrain: ', nTrain)
 print('nTest: ', nTest)
-
 opt.epochSize = nTrain / opt.batchSize
 
 -------------------------------------
 -- Model
 
-if opt.cuda then
-    SpatialConvolution = cudnn.SpatialConvolution
-    SpatialMaxPooling  = cudnn.SpatialMaxPooling
-else
-    SpatialConvolution = nn.SpatialConvolutionMM
-    SpatialMaxPooling  = nn.SpatialMaxPooling
-end
+print('Loading model : '..opt.netType)
+paths.dofile(opt.path2model)
+if opt.cuda then model:cuda() end
 
-function load_overfeat()
-    print('Creating overfeat')
-    -- conv
-    local conv = nn.Sequential()
-    conv:add(SpatialConvolution(3, 96, 7, 7, 2, 2))
-    conv:add(nn.ReLU(true))
-    conv:add(SpatialMaxPooling(3, 3, 3, 3))
-    conv:add(SpatialConvolution(96, 256, 7, 7, 1, 1))
-    conv:add(nn.ReLU(true))
-    conv:add(SpatialMaxPooling(2, 2, 2, 2))
-    conv:add(SpatialConvolution(256, 512, 3, 3, 1, 1, 1, 1))
-    conv:add(nn.ReLU(true))
-    conv:add(SpatialConvolution(512, 512, 3, 3, 1, 1, 1, 1))
-    conv:add(nn.ReLU(true))
-    conv:add(SpatialConvolution(512, 1024, 3, 3, 1, 1, 1, 1))
-    conv:add(nn.ReLU(true))
-    conv:add(SpatialConvolution(1024, 1024, 3, 3, 1, 1, 1, 1))
-    conv:add(nn.ReLU(true))
-    -- classifier
-    local classif = nn.Sequential()
-    classif:add(SpatialMaxPooling(3, 3, 3, 3))
-    classif:add(SpatialConvolution(1024, 4096, 5, 5, 1, 1))
-    classif:add(nn.ReLU(true))
-    classif:add(nn.Dropout(0.5))
-    classif:add(SpatialConvolution(4096, 4096, 1, 1, 1, 1))
-    classif:add(nn.ReLU(true))
-    classif:add(nn.Dropout(0.5))
-    classif:add(SpatialConvolution(4096, nClasses, 1, 1, 1, 1))
-    classif:add(nn.View(nClasses))
-    classif:add(nn.LogSoftMax())
-    -- model
-    local model = nn.Sequential()
-    model:add(conv)
-    model:add(classif)
+assert(opt.imageSize == model.imageSize)
+assert(opt.netType == model.name)
+assert(model.params_conv > 0)
 
-    if opt.pretrain == 'yes' then
-        print('Loading overfeat weights')
-        local m = model:get(1).modules
-        local ParamBank = require 'ParamBank'
-        local offset = 0
-        ParamBank:init("net_weight_1")
-        ParamBank:read(        0, {96,3,7,7},      m[offset+1].weight)
-        ParamBank:read(    14112, {96},            m[offset+1].bias)
-        ParamBank:read(    14208, {256,96,7,7},    m[offset+4].weight)
-        ParamBank:read(  1218432, {256},           m[offset+4].bias)
-        ParamBank:read(  1218688, {512,256,3,3},   m[offset+7].weight)
-        ParamBank:read(  2398336, {512},           m[offset+7].bias)
-        ParamBank:read(  2398848, {512,512,3,3},   m[offset+9].weight)
-        ParamBank:read(  4758144, {512},           m[offset+9].bias)
-        ParamBank:read(  4758656, {1024,512,3,3},  m[offset+11].weight)
-        ParamBank:read(  9477248, {1024},          m[offset+11].bias)
-        ParamBank:read(  9478272, {1024,1024,3,3}, m[offset+13].weight)
-        ParamBank:read( 18915456, {1024},          m[offset+13].bias)
-        -- ParamBank:read( 18916480, {4096,1024,5,5}, m[offset+16].weight)
-        -- ParamBank:read(123774080, {4096},          m[offset+16].bias)
-        -- ParamBank:read(123778176, {4096,4096,1,1}, m[offset+18].weight)
-        -- ParamBank:read(140555392, {4096},          m[offset+18].bias)
-        -- ParamBank:read(140559488, {1000,4096,1,1}, m[offset+20].weight)
-        -- ParamBank:read(144655488, {1000},          m[offset+20].bias)
-    end
-    model.imageSize = 221
-    model.name = 'overfeat'
-    model.params_conv = 18916480
-    return model
-end
-
--- load_vgg16 for finetuning
-function load_vgg16()
-    local model = torch.load('vgg16/model0.t7')
-    model:remove(40) -- cudnn.SoftMax
-    model:remove(39) -- nn.Linear(4096,1000)
-    model:add(nn.Linear(4096, nClasses))
-    model:add(nn.LogSoftMax())
-    model:get(33):reset()
-    model:get(36):reset()
-    model.imageSize = 224
-    model.name = 'vgg16'
-    return model
-end
-
-print('Loading model')
-local model = load_overfeat()
-
-if opt.cuda then
-    -- cudnn.convert(model, cudnn)
-    model:cuda()
-end
-
-print(model.name..' is loaded !')
---assert(opt.imageSize == model.imageSize)
 print('Input = '..opt.batchSize..'x3x'..model.imageSize..'x'..model.imageSize)
 print(model)
 
@@ -303,14 +146,13 @@ local parameters, gradParameters = model:getParameters()
 local criterion = nn.ClassNLLCriterion()
 if opt.cuda then criterion:cuda() end
 
-local confusion   = optim.ConfusionMatrix(nClasses)
+-- local confusion   = optim.ConfusionMatrix(nClasses)
 local trainLogger = optim.Logger(paths.concat(opt.path2save, 'train.log'))
 local testLogger  = optim.Logger(paths.concat(opt.path2save, 'test.log'))
 
 -------------------------------------
--- Optimizer
+-- Optimizer SGD
 
--- sgd
 local config = {
     learningRate = opt.lr,
     weightDecay = opt.wd,
@@ -319,7 +161,6 @@ local config = {
     learningRateConvFactor = opt.lrf_conv,
     paramsBeforeFullyConnected = model.params_conv
 }
-
 optim.sgd = require 'sgd'
 
 -------------------------------------
@@ -338,14 +179,16 @@ function train()
     top5_epoch = 0
     loss_epoch = 0
 
+    local shuffle = torch.randperm(nTrain) -- if global not upvalue
+
     batch_id = 1
     for i = 1, opt.epochSize do
         local indexStart = (i-1) * opt.batchSize + 1
         local indexEnd = (indexStart + opt.batchSize - 1)
         pool:addjob(
             function()
-                local inputs, labels = trainLoader:get(indexStart, indexEnd)
-                return inputs, labels
+                local inputs, targets = trainLoader:get(indexStart, indexEnd, shuffle)
+                return inputs, targets
             end,
             trainBatch
         )
@@ -354,20 +197,25 @@ function train()
     pool:synchronize()
     cutorch.synchronize()
 
-    top1_epoch = top1_epoch + top1
-    top5_epoch = top5_epoch + top5
-    loss_epoch = loss_epoch + loss
+    top1_epoch = top1_epoch * 100 / (opt.batchSize * opt.epochSize)
+    top5_epoch = top5_epoch * 100 / (opt.batchSize * opt.epochSize)
+    loss_epoch = loss_epoch / opt.epochSize
 
     trainLogger:add{
         ['top1 accuracy (%)'] = top1_epoch / opt.epochSize,
         ['top5 accuracy (%)'] = top5_epoch / opt.epochSize,
         ['avg loss'] = loss_epoch / opt.epochSize
-        --['time (seconds)'] = tm.time().real
     }
-    if opt.save_model then
-        print('# ... saving model')
-        torch.save(paths.concat(opt.path2save, 'model'..epoch_id..'.t7'), model)
-    end
+    print(string.format('Epoch: [%d][TRAINING SUMMARY] Total Time(s): %.2f\t'
+                          .. 'average loss (per batch): %.2f \t '
+                          .. 'accuracy(%%):\t top-1 %.2f\t'
+                          .. 'accuracy(%%):\t top-5 %.2f\t',
+                       epoch_id, tmEpoch:time().real, loss_epoch, top1_epoch, top5_epoch))
+    print()
+    -- if opt.save_model then
+    --     print('# ... saving model')
+    --     torch.save(paths.concat(opt.path2save, 'model'..epoch_id..'.t7'), model)
+    -- end
 end
 
 function trainBatch(inputsCPU, targetsCPU, threadid)
@@ -385,13 +233,14 @@ function trainBatch(inputsCPU, targetsCPU, threadid)
         model:zeroGradParameters()
         outputs = model:forward(inputs)
         loss    = criterion:forward(outputs, targets)
-        local df_do   = criterion:backward(outputs, targets)
+        local df_do = criterion:backward(outputs, targets)
         model:backward(inputs, df_do)
         return loss, gradParameters
     end
     optim.sgd(feval, parameters, config)
 
     cutorch.synchronize()
+    loss_epoch = loss_epoch + loss
     local top1 = 0
     local top5 = 0
     do
@@ -427,56 +276,100 @@ end
 -- Testing
 
 function test()
-    print('# --------------------- #')
-    print('# ... testing model ... #')
-    print('# --------------------- #')
-    print('')
-    collectgarbage()
-    local timer = torch.Timer()
-    t_outputs, t_targets = {}, {}
+    print('==> doing epoch on testing data:')
+    print("==> online epoch # " .. epoch_id)
+
+    cutorch.synchronize()
     model:evaluate()
-    local batch_id = 1
-    for i = 1, trainset.size, opt.batchSize do
-        print('Processing batch num '..batch_id)
-        if i + opt.batchSize > testset.size then
-            b_size = testset.size - i
-        else
-            b_size = opt.batchSize
-        end
-        inputs  = torch.zeros(b_size, 3, model.imageSize, model.imageSize)
-        targets = torch.zeros(b_size)
-        for j = 1, b_size do
-            path2img   = paths.concat(opt.path2data,
-                label2class[testset.label[i+j]],
-                testset.path[i+j])
-            inputs[j]  = torch.cdiv(image.load(path2img) - mean, std)
-            targets[j] = testset.label[i+j]
-        end
-        if opt.cuda then
-            inputs  = inputs:cuda()
-            targets = targets:cuda()
-        end
-        outputs = model:forward(inputs)
-        _, amax = outputs:max(2)
-        table.insert(t_outputs, amax:resizeAs(targets))
-        table.insert(t_targets, targets:clone())
-        print('> seconds : '..timer:time().real)
-        batch_id = batch_id + 1
+
+    tmEpoch:reset()
+
+    top1_epoch = 0
+    top5_epoch = 0
+    loss_epoch = 0
+
+    batch_id = 1
+    for i = 1, nTest/opt.batchSize do
+        local indexStart = (i-1) * opt.batchSize + 1
+        local indexEnd = (indexStart + opt.batchSize - 1)
+        pool:addjob(
+            function()
+                local inputs, targets = testLoader:get(indexStart, indexEnd)
+                return inputs, targets
+            end,
+            testBatch
+        )
     end
-    -- print(confusion)
-    confusion:zero()
-    for i = 1, #t_outputs do
-        confusion:batchAdd(t_outputs[i], t_targets[i])
-    end
-    confusion:updateValids()
-    print('> perf test : '..(confusion.totalValid * 100))
-    testLogger:add{['top 1 accuracy (%)'] = confusion.totalValid * 100}
+
+    pool:synchronize()
+    cutorch.synchronize()
+
+    top1_epoch = top1_epoch * 100 / (opt.batchSize * opt.epochSize)
+    top5_epoch = top5_epoch * 100 / (opt.batchSize * opt.epochSize)
+    loss_epoch = loss_epoch / (nTest/opt.batchSize)
+
+    testLogger:add{
+        ['top1 accuracy (%)'] = top1_epoch / opt.epochSize,
+        ['top5 accuracy (%)'] = top5_epoch / opt.epochSize,
+        ['avg loss'] = loss_epoch / opt.epochSize
+    }
+    print(string.format('Epoch: [%d][TESTING SUMMARY] Total Time(s): %.2f\t'
+                          .. 'average loss (per batch): %.2f \t '
+                          .. 'accuracy(%%):\t top-1 %.2f\t'
+                          .. 'accuracy(%%):\t top-5 %.2f\t',
+                       epoch_id, tmEpoch:time().real, loss_epoch, top1_epoch, top5_epoch))
+    print()
 end
 
--------------------------------------
--- Setting epochs
+function testBatch(inputsCPU, targetsCPU, threadid)
+    --print('Training with CPU', 'Receving data from threadid='..threadid)
+    cutorch.synchronize()
+    collectgarbage()
+    local dataLoadingTime = tmDataload:time().real 
+    tmBatch:reset()
 
--- you can interrupt the training process with a SIGUSR1
+    inputs:resize(inputsCPU:size()):copy(inputsCPU) --transfer over to GPU
+    targets:resize(targetsCPU:size()):copy(targetsCPU)
+
+    local outputs = model:forward(inputs)
+    local loss = criterion:forward(outputs, targets)
+    local pred = outputs:float()
+
+    loss_epoch = loss_epoch + loss
+    local top1 = 0
+    local top5 = 0
+    do
+      local _,prediction_sorted = outputs:float():sort(2, true) -- descending
+      for i=1, opt.batchSize do
+        if prediction_sorted[i][1] == targetsCPU[i] then
+          top1_epoch = top1_epoch + 1;
+          top1 = top1 + 1
+        end
+        for j=1,5 do
+          if prediction_sorted[i][j] == targetsCPU[i] then
+            top5_epoch = top5_epoch + 1
+            top5 = top5 + 1
+            break
+          end
+        end
+      end
+      top1 = top1 * 100 / opt.batchSize
+      top5 = top5 * 100 / opt.batchSize
+    end
+
+    print(('Epoch: Testing [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f Top5-%%: %.2f DataLoadingTime %.3f'):format(
+      epoch_id, batch_id, nTest/opt.batchSize, tmBatch:time().real,
+      loss, top1, top5, dataLoadingTime))
+
+    batch_id = batch_id + 1
+    tmDataload:reset()
+end
+
+
+-------------------------------------
+-- Lunching training and testing
+
+-- you can interrupt the training process sending a SIGUSR1 signal
 sig.signal(sig.SIGUSR1, function()
   print('Interrupting training at the end of this epoch.')
   interrupt = true
@@ -495,20 +388,10 @@ end
 -------------------------------------
 -- Saving network
 
-function sanitize (net)
-    local list = net:listModules()
-    for _,val in ipairs(list) do
-        for name,field in pairs(val) do
-            if torch.type(field) == 'cdata' then val[name] = nil end
-            if (name == 'output' or name == 'gradInput') then
-                val[name] = field.new()
-            end
-        end
-    end
-end
+local sanitize = require 'sanitize'
 
 print('Saving model')
 sanitize(model)
-torch.save(opt.save..'/model_final.t7', model)
+torch.save(opt.path2save..'/model'..epoch_id..'.t7', model)
 
 print('End of training')

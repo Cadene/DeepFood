@@ -126,3 +126,4 @@ collectgarbage()
 
 
 --shuffle = torch.randperm(trainLoader:size()) -- TODO
+
