@@ -6,10 +6,10 @@ wget -P networks/ http://webia.lip6.fr/~cadene/vgg16.t7
 wget -P networks/ http://webia.lip6.fr/~cadene/vgg19.t7
 ```
 
- ## Create the augmented dataset (I will simplify this step)
+## Create the augmented dataset (I will simplify this step)
 
-- overfeat takes 3*221*221 formated images
-- vgg16&vgg19 takes 3*224*224 formated images
+- overfeat takes images formated as 3x221x221
+- vgg16&vgg19 takes images formated as 3x224x224 
 
 ```
 ./createdataset.sh                             # you have to edit those files
