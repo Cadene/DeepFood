@@ -90,8 +90,45 @@ if opt.cuda then
     require 'cudnn'
 end
 
+
 -------------------------------------
--- Lunching Threads and recovering Datasets
+-- Creating dataLoaders if not cached
+
+opt.trainCache = paths.concat(opt.path2cache, 'trainCache.t7')
+opt.testCache = paths.concat(opt.path2cache, 'testCache.t7')
+opt.path2mean = paths.concat(opt.path2data, 'mean.jpg') -- sent to init_thread
+opt.path2std = paths.concat(opt.path2data, 'std.jpg')   -- sent to init_thread
+
+local loadSize   = {3, opt.imageSize, opt.imageSize}
+local sampleSize = {3, opt.imageSize, opt.imageSize}
+
+if not paths.filep(opt.trainCache) and not paths.filep(testCache) then
+    print('Creating train metadata')
+    trainLoader = dataLoader{
+        paths = {paths.concat(opt.path2data, 'train')},
+        loadSize = loadSize,
+        sampleSize = sampleSize,
+        split = 100,
+        verbose = true
+    }
+    print('Creating test metadata')
+    testLoader = dataLoader{
+        paths = {paths.concat(opt.path2data, 'test')},
+        loadSize = loadSize,
+        sampleSize = sampleSize,
+        split = 0,
+        verbose = true,
+        forceClasses = trainLoader.classes -- force consistent class indices between trainLoader and testLoader
+    }
+    torch.save(opt.trainCache, trainLoader)
+    torch.save(opt.testCache, testLoader)
+    trainLoader = nil
+    testLoader = nil
+    collectgarbage()
+end
+
+-------------------------------------
+-- Lunching Threads and recovering dataLoaders
 
 threads.serialization('threads.sharedserialize')
 do 
