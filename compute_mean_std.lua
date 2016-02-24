@@ -1,8 +1,10 @@
+require 'torch'
+require 'dataset'
 require 'image'
 
 timer = torch.Timer()
 
-path2train = '/home/cadene/data/UPMC_Food101_224_augmented/train'
+local path2train = '/home/cadene/data/UPMC_Food101_224_augmented/train'
 
 print("\n# mean", timer:time().real)
 

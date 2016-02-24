@@ -31,7 +31,7 @@ local tmBatch = torch.Timer()
 -------------------------------------
 -- Options
 
-cmd = torch.CmdLine()
+local cmd = torch.CmdLine()
 -- Training options
 cmd:option('-pretrain', 'yes', 'Options: yes (finetuning) | no (from scratch)')
 cmd:option('-threads', 2, 'Threads number (minimum 2)')
