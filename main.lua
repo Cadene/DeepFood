@@ -6,12 +6,15 @@
 --  LICENSE file in the root directory of this source tree. An additional grant
 --  of patent rights can be found in the PATENTS file in the same directory.
 --
---  Author: remi.cadene@lip6.fr
+--  Authors:
+--  Remi Cadene - remi.cadene@lip6.fr - github.com/Cadene
+
 
 require 'torch'
 require 'nn'
 require 'image'
 require 'optim'
+
 local threads = require 'threads'
 
 local sig     = require 'posix.signal'
@@ -30,11 +33,11 @@ local tmBatch = torch.Timer()
 
 cmd = torch.CmdLine()
 -- Training options
--- cmd:option('-pretrain', 'yes', 'Options: yes (finetuning) | no (from scratch)')
-cmd:option('-threads', 1, 'Threads number (minimum 2)')
+cmd:option('-pretrain', 'yes', 'Options: yes (finetuning) | no (from scratch)')
+cmd:option('-threads', 2, 'Threads number (minimum 2)')
 cmd:option('-imageSize', 221, 'w and h of an image to load')
 cmd:option('-batchSize', 60, 'Size of a batch (60 for overfeat, 20 for vgg19)')
-cmd:option('-netType', 'overfeat', 'Options: overfeat | vgg16')
+cmd:option('-netType', 'overfeat', 'Options: overfeat | vgg16 | vgg19')
 -- Optimization options
 cmd:option('-lr',  8e-1, 'Learning Rate')
 cmd:option('-lrd', 3e-4, 'Learning Rate Decay')
@@ -53,6 +56,11 @@ opt.path2cache = '/home/cadene/doc/DeepFood/cache_'..opt.imageSize
 opt.path2save = '/home/cadene/doc/DeepFood/GPU'..opt.idGPU
 opt.path2networks = '/home/cadene/doc/DeepFood/networks'
 opt.path2model = opt.path2networks..'/'..opt.netType..'.lua'
+
+if opt.pretrain == 'no' then
+    assert(opt.lrf_conv == 1,
+        'The learning rate of each weights must be equal if you don\'t want to fine tune.')
+end
 
 -------------------------------------
 -- Info
@@ -76,7 +84,7 @@ torch.setdefaulttensortype('torch.FloatTensor')
 if opt.cuda then
     print('Loading CUDA and CUDNN')
     require 'cutorch'
-    cutorch.setDevice(1) -- use CUDA_VISIBLE_DEVICES=i th main.lua i=[0,7]
+    cutorch.setDevice(1) -- use `CUDA_VISIBLE_DEVICES=i th main.lua`
     cutorch.manualSeed(opt.seed)
     require 'cunn'
     require 'cudnn'
@@ -121,21 +129,28 @@ nClasses = #classes
 print('nClasses: ', nClasses)
 print('nTrain: ', nTrain)
 print('nTest: ', nTest)
-opt.epochSize = nTrain / opt.batchSize
+opt.nBatchTrain = math.floor(nTrain / opt.batchSize)
+opt.nBatchTest  = math.floor(nTest / opt.batchSize)
 
 -------------------------------------
 -- Model
 
 print('Loading model : '..opt.netType)
 paths.dofile(opt.path2model)
+
+if opt.pretrain == 'no' then
+    print('/!\\ Reseting weights in order to train from scratch')
+    model:reset()
+end
+
 if opt.cuda then model:cuda() end
+
+print('Input = '..opt.batchSize..'x3x'..model.imageSize..'x'..model.imageSize)
+print(model)
 
 assert(opt.imageSize == model.imageSize)
 assert(opt.netType == model.name)
 assert(model.params_conv > 0)
-
-print('Input = '..opt.batchSize..'x3x'..model.imageSize..'x'..model.imageSize)
-print(model)
 
 local inputs = torch.CudaTensor()
 local targets = torch.CudaTensor()
@@ -149,6 +164,7 @@ if opt.cuda then criterion:cuda() end
 -- local confusion   = optim.ConfusionMatrix(nClasses)
 local trainLogger = optim.Logger(paths.concat(opt.path2save, 'train.log'))
 local testLogger  = optim.Logger(paths.concat(opt.path2save, 'test.log'))
+local lossLogger  = optim.Logger(paths.concat(opt.path2save, 'loss.log'))
 
 -------------------------------------
 -- Optimizer SGD
@@ -167,8 +183,8 @@ optim.sgd = require 'sgd'
 -- Training 
 
 function train()
-    print('==> doing epoch on training data:')
-    print("==> online epoch # " .. epoch_id)
+    print('==> Doing epoch on training data:')
+    print("==> Online epoch # " .. epoch_id)
 
     cutorch.synchronize()
     model:training()
@@ -182,7 +198,7 @@ function train()
     local shuffle = torch.randperm(nTrain) -- if global not upvalue
 
     batch_id = 1
-    for i = 1, opt.epochSize do
+    for i = 1, opt.nBatchTrain do
         local indexStart = (i-1) * opt.batchSize + 1
         local indexEnd = (indexStart + opt.batchSize - 1)
         pool:addjob(
@@ -197,21 +213,20 @@ function train()
     pool:synchronize()
     cutorch.synchronize()
 
-    top1_epoch = top1_epoch * 100 / (opt.batchSize * opt.epochSize)
-    top5_epoch = top5_epoch * 100 / (opt.batchSize * opt.epochSize)
-    loss_epoch = loss_epoch / opt.epochSize
+    top1_epoch = top1_epoch * 100 / (opt.nBatchTrain * opt.batchSize)
+    top5_epoch = top5_epoch * 100 / (opt.nBatchTrain * opt.batchSize)
+    loss_epoch = loss_epoch / opt.nBatchTrain
 
     trainLogger:add{
-        ['top1 accuracy (%)'] = top1_epoch / opt.epochSize,
-        ['top5 accuracy (%)'] = top5_epoch / opt.epochSize,
-        ['avg loss'] = loss_epoch / opt.epochSize
+        ['top1 accuracy (%)'] = top1_epoch / opt.nBatchTrain,
+        ['top5 accuracy (%)'] = top5_epoch / opt.nBatchTrain,
+        ['avg loss'] = loss_epoch / opt.nBatchTrain
     }
+
     print(string.format('Epoch: [%d][TRAINING SUMMARY] Total Time(s): %.2f\t'
-                          .. 'average loss (per batch): %.2f \t '
-                          .. 'accuracy(%%):\t top-1 %.2f\t'
-                          .. 'accuracy(%%):\t top-5 %.2f\t',
-                       epoch_id, tmEpoch:time().real, loss_epoch, top1_epoch, top5_epoch))
-    print()
+                          .. 'Avg loss (per batch): %.2f \t '
+                          .. 'Avg accuracy(%%):\t top-1 %.2f\ttop-5 %.2f\n',
+        epoch_id, tmEpoch:time().real, loss_epoch, top1_epoch, top5_epoch))
     -- if opt.save_model then
     --     print('# ... saving model')
     --     torch.save(paths.concat(opt.path2save, 'model'..epoch_id..'.t7'), model)
@@ -238,35 +253,42 @@ function trainBatch(inputsCPU, targetsCPU, threadid)
         return loss, gradParameters
     end
     optim.sgd(feval, parameters, config)
-
     cutorch.synchronize()
-    loss_epoch = loss_epoch + loss
+    
     local top1 = 0
     local top5 = 0
     do
-      local _,prediction_sorted = outputs:float():sort(2, true) -- descending
-      for i=1, opt.batchSize do
-        if prediction_sorted[i][1] == targetsCPU[i] then
-          top1_epoch = top1_epoch + 1;
-          top1 = top1 + 1
+        local _,prediction_sorted = outputs:float():sort(2, true) -- descending
+        for i=1, opt.batchSize do
+            if prediction_sorted[i][1] == targetsCPU[i] then
+                top1_epoch = top1_epoch + 1;
+                top1 = top1 + 1
+            end
+            for j=1,5 do
+                if prediction_sorted[i][j] == targetsCPU[i] then
+                    top5_epoch = top5_epoch + 1
+                    top5 = top5 + 1
+                    break
+                end
+            end
         end
-        for j=1,5 do
-          if prediction_sorted[i][j] == targetsCPU[i] then
-            top5_epoch = top5_epoch + 1
-            top5 = top5 + 1
-            break
-          end
-        end
-      end
-      top1 = top1 * 100 / opt.batchSize
-      top5 = top5 * 100 / opt.batchSize
     end
+    top1 = top1 * 100 / opt.batchSize
+    top5 = top5 * 100 / opt.batchSize
+
+    lossLogger:add{
+        ['batch id'] = batch_id,
+        ['loss'] = loss
+    }
+    loss_epoch = loss_epoch + loss
 
     local current_lr = config.learningRate / (1 + config.evalCounter*config.learningRateDecay)
 
-    print(('Epoch: [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f Top5-%%: %.2f LR %.2e DataLoadingTime %.3f'):format(
-      epoch_id, batch_id, opt.epochSize, tmBatch:time().real,
-      loss, top1, top5, current_lr, dataLoadingTime))
+    print(string.format('Epoch: [%d][%d/%d]\t'
+        .. 'Time(sec): Batch %.3f\tDataLoading %.3f\tLR: %.2e'
+        .. '\tLoss: %.4f\tAccuracy(%%):\tTop1 %.2f\tTop5 %.2f',
+        epoch_id, batch_id, opt.nBatchTrain, tmBatch:time().real, 
+        dataLoadingTime, current_lr, loss, top1, top5))
 
     batch_id = batch_id + 1
     tmDataload:reset()
@@ -276,8 +298,8 @@ end
 -- Testing
 
 function test()
-    print('==> doing epoch on testing data:')
-    print("==> online epoch # " .. epoch_id)
+    print('==> Doing epoch on testing data:')
+    print("==> Online epoch # " .. epoch_id)
 
     cutorch.synchronize()
     model:evaluate()
@@ -289,7 +311,7 @@ function test()
     loss_epoch = 0
 
     batch_id = 1
-    for i = 1, nTest/opt.batchSize do
+    for i = 1, opt.nBatchTest do
         local indexStart = (i-1) * opt.batchSize + 1
         local indexEnd = (indexStart + opt.batchSize - 1)
         pool:addjob(
@@ -304,21 +326,19 @@ function test()
     pool:synchronize()
     cutorch.synchronize()
 
-    top1_epoch = top1_epoch * 100 / (opt.batchSize * opt.epochSize)
-    top5_epoch = top5_epoch * 100 / (opt.batchSize * opt.epochSize)
-    loss_epoch = loss_epoch / (nTest/opt.batchSize)
+    top1_epoch = top1_epoch * 100 / (opt.nBatchTest * opt.batchSize)
+    top5_epoch = top5_epoch * 100 / (opt.nBatchTest * opt.batchSize)
+    loss_epoch = loss_epoch / opt.batchSize
 
     testLogger:add{
-        ['top1 accuracy (%)'] = top1_epoch / opt.epochSize,
-        ['top5 accuracy (%)'] = top5_epoch / opt.epochSize,
-        ['avg loss'] = loss_epoch / opt.epochSize
+        ['top1 accuracy (%)'] = top1_epoch / opt.nBatchTest,
+        ['top5 accuracy (%)'] = top5_epoch / opt.nBatchTest,
+        ['avg loss'] = loss_epoch / opt.nBatchTest
     }
     print(string.format('Epoch: [%d][TESTING SUMMARY] Total Time(s): %.2f\t'
-                          .. 'average loss (per batch): %.2f \t '
-                          .. 'accuracy(%%):\t top-1 %.2f\t'
-                          .. 'accuracy(%%):\t top-5 %.2f\t',
-                       epoch_id, tmEpoch:time().real, loss_epoch, top1_epoch, top5_epoch))
-    print()
+        .. 'Avg loss (per batch): %.2f \t '
+        .. 'Avg accuracy(%%):\t top-1 %.2f\ttop-5 %.2f\n',
+        epoch_id, tmEpoch:time().real, loss_epoch, top1_epoch, top5_epoch))
 end
 
 function testBatch(inputsCPU, targetsCPU, threadid)
@@ -335,32 +355,34 @@ function testBatch(inputsCPU, targetsCPU, threadid)
     local loss = criterion:forward(outputs, targets)
     local pred = outputs:float()
 
-    loss_epoch = loss_epoch + loss
     local top1 = 0
     local top5 = 0
     do
-      local _,prediction_sorted = outputs:float():sort(2, true) -- descending
-      for i=1, opt.batchSize do
-        if prediction_sorted[i][1] == targetsCPU[i] then
-          top1_epoch = top1_epoch + 1;
-          top1 = top1 + 1
+        local _,prediction_sorted = outputs:float():sort(2, true) -- descending
+        for i=1, opt.batchSize do
+            if prediction_sorted[i][1] == targetsCPU[i] then
+                top1_epoch = top1_epoch + 1;
+                top1 = top1 + 1
+            end
+            for j=1,5 do
+                if prediction_sorted[i][j] == targetsCPU[i] then
+                    top5_epoch = top5_epoch + 1
+                    top5 = top5 + 1
+                    break
+                end
+            end
         end
-        for j=1,5 do
-          if prediction_sorted[i][j] == targetsCPU[i] then
-            top5_epoch = top5_epoch + 1
-            top5 = top5 + 1
-            break
-          end
-        end
-      end
-      top1 = top1 * 100 / opt.batchSize
-      top5 = top5 * 100 / opt.batchSize
     end
+    top1 = top1 * 100 / opt.batchSize
+    top5 = top5 * 100 / opt.batchSize
 
-    print(('Epoch: Testing [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f Top5-%%: %.2f DataLoadingTime %.3f'):format(
-      epoch_id, batch_id, nTest/opt.batchSize, tmBatch:time().real,
-      loss, top1, top5, dataLoadingTime))
+    print(string.format('Epoch: Testing [%d][%d/%d]\t'
+        .. 'Time(sec): Batch %.3f\tDataLoading %.3f\t'
+        .. 'Loss: %.4f\tAccuracy(%%):\tTop1 %.2f\tTop5 %.2f',
+        epoch_id, batch_id, opt.nBatchTest, tmBatch:time().real, dataLoadingTime,
+        loss, top1, top5))
 
+    loss_epoch = loss_epoch + loss
     batch_id = batch_id + 1
     tmDataload:reset()
 end
@@ -376,7 +398,7 @@ sig.signal(sig.SIGUSR1, function()
 end)
 
 epoch_id = 1
-while opt.nb_epoch >= epoch_id do
+while epoch_id < opt.nb_epoch do
     train()
     test()
     if interrupt then
