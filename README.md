@@ -1,6 +1,6 @@
-## Install
+# Deep Food : An easy and fast way to fine tune deep networks with Torch7
 
-### Download the weights and bias
+## Download the weights and bias
 
 ```
 wget -P networks/ https://cloud.lip6.fr/index.php/s/7ZLIcvucyg4tyLN/download # overfeat
