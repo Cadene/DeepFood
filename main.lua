@@ -2,13 +2,7 @@
 --  Copyright (c) 2016, LIP6, Inc.
 --  All rights reserved.
 --
---  This source code is licensed under the BSD-style license found in the
---  LICENSE file in the root directory of this source tree. An additional grant
---  of patent rights can be found in the PATENTS file in the same directory.
---
---  Authors:
---  Remi Cadene - remi.cadene@lip6.fr - github.com/Cadene
-
+--  remi.cadene@lip6.fr
 
 require 'torch'
 require 'nn'
@@ -65,8 +59,8 @@ end
 -------------------------------------
 -- Info
 
-print("Lunching using pid = "..unistd.getpid().." on CPU")
-print("Lunching using GPU = "..opt.idGPU)
+print("Launching using pid = "..unistd.getpid().." on CPU")
+print("Launching using GPU = "..opt.idGPU)
 print("Options : ", opt)
 
 print('Caching everything to: ' .. opt.path2cache)
@@ -76,7 +70,7 @@ print('Saving everything to: ' .. opt.path2save)
 os.execute('mkdir -p ' .. opt.path2save)
 
 os.execute('echo "'..unistd.getpid()..'" > '..opt.path2save..'/pid.log')
-os.execute('echo "'..os.date():gsub(' ','')..'" > '..opt.path2save..'/lunchdate.log')
+os.execute('echo "'..os.date():gsub(' ','')..'" > '..opt.path2save..'/launchdate.log')
 
 torch.manualSeed(opt.seed)
 -- torch.setnumthreads(4) -- doesn't seem to affect anything...
@@ -128,7 +122,7 @@ if not paths.filep(opt.trainCache) and not paths.filep(testCache) then
 end
 
 -------------------------------------
--- Lunching Threads and recovering dataLoaders
+-- Launching Threads and recovering dataLoaders
 
 threads.serialization('threads.sharedserialize')
 do 
@@ -426,7 +420,7 @@ end
 
 
 -------------------------------------
--- Lunching training and testing
+-- Launching training and testing
 
 -- you can interrupt the training process sending a SIGUSR1 signal
 sig.signal(sig.SIGUSR1, function()
