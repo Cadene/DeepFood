@@ -1,7 +1,7 @@
 # How to fine tune a deep convolutional networks ?
 
 > This repo contains an easy and fast way to fine tune deep networks with Torch7.
-> The method is inspired from [ImageNet-multiGPU][https://github.com/soumith/imagenet-multiGPU.torch]
+> The method is inspired from [ImageNet-multiGPU](https://github.com/soumith/imagenet-multiGPU.torch)
 
 ## Download the weights and bias
 
