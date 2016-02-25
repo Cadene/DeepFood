@@ -43,14 +43,14 @@ CUDA_VISIBLE_DEVICES=0 th main.lua -h        # display options
 CUDA_VISIBLE_DEVICES=0 th main.lua           # create GPU0 dir to log the exp
 ```
 
-## Optional : Lunch a safe experience
+## Optional : Launch a safe experience
 
-When you have to wait for several hours or days, you want a safe way to lunch an experience.
+When you have to wait for several hours or days, you want a safe way to launch an experience.
 With `nohup` the process will still run even if your ssh connexion is closed.
 
 ```
 echo "CUDA_VISIBLE_DEVICES=0 th main.lua -netType vgg16 -pretrain yes -imageSize 224 -batchSize 26 -lr 0.1" > GPU0.sh
 chmod 755 GPU0.sh                            # in order to be executed by the shell
-nohup ./GPU0.sh > GPU0.log &                 # lunch without a terminal
+nohup ./GPU0.sh > GPU0.log &                 # launch without a terminal
 tail -100 GPU0.log                           # keep track of the training process
 ```
