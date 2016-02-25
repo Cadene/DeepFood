@@ -36,6 +36,7 @@ th main_meanstd.lua                          # create mean&std.jpg in dataset di
 ## Train the network
 
 This code train and evaluate overfeat for a given augmented dataset.
+The trainset is shuffled so that each (augmented) image is viewed only once per epoch.
 ```
 nvidia-smi                                   # display your GPU devices id
 CUDA_VISIBLE_DEVICES=0 th main.lua -h        # display options
