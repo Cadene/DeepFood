@@ -43,7 +43,7 @@ CUDA_VISIBLE_DEVICES=0 th main.lua -h        # display options
 CUDA_VISIBLE_DEVICES=0 th main.lua           # create GPU0 dir to log the exp
 ```
 
-## Optional : Launch a safe experience
+## Optional : Lunch a safe DeepFood experience
 
 When you have to wait for several hours or days, you want a safe way to launch an experience.
 With `nohup` the process will still run even if your ssh connexion is closed.
