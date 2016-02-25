@@ -1,21 +1,21 @@
 require 'torch'
 require 'dataset'
+require 'image'
+require 'xlua'
 local threads = require 'threads'
 
 local tm = torch.Timer()
 
 local cmd = torch.CmdLine()
-cmd:option('-name', 'UPMC_Food101', 'Name of the trainset')
-cmd:option('-path2data', '/home/cadene/data/UPMC_Food101/images', '')
-cmd:option('-path2augm', '/home/cadene/data/UPMC_Food101_test', '')
-cmd:option('-path2cache', 'cache', '')
+cmd:option('-path2data', '/home/cadene/data/UPMC_Food101/images', 'Original directory.')
+cmd:option('-path2augm', '/home/cadene/data/UPMC_Food101_test2', 'New directory.')
+cmd:option('-path2cache', 'cache', 'Temporary directory to store dataLoaders.')
 cmd:option('-imageSize', 256, '256x256^')
 cmd:option('-cropSize', 224, '224x224')
-cmd:option('-threads', 4, '')
+cmd:option('-threads', 8, 'Number of threads.')
 local opt = cmd:parse(arg or {})
 
 os.execute('mkdir -p ' .. opt.path2augm)
-
 
 print('Creating original train metadata')
 trainLoader = dataLoader{
@@ -85,6 +85,8 @@ for i = 1, #classes do
     os.execute('mkdir -p '..paths.concat(opt.path2augm,'test',classes[i]))
 end
 
+
+local count = 0
 print('Creating augmented trainset')
 tm:reset()
 for i = 1, nTrain do
@@ -105,12 +107,17 @@ for i = 1, nTrain do
                     ..' -flop -crop '..opt.cropSize..'x'..opt.cropSize..'+0+0 +repage'
                     ..' "'..imgPath..'"')
             end
-            print(' '..imgName)
+        end,
+        function()
+            count = count + 1
+            xlua.progress(count, nTrain)
         end
     )
 end
 local tm_augm_train = tm:time().real
 
+tm:reset()
+local count = 0
 print('Creating augmented testset')
 for i = 1, nTest do
     pool:addjob(
@@ -130,18 +137,17 @@ for i = 1, nTest do
                     ..' -flop -crop '..opt.cropSize..'x'..opt.cropSize..'+0+0 +repage'
                     ..' "'..imgPath..'"')
             end
-            print(' '..imgName)
+        end,
+        function()
+            count = count + 1
+            xlua.progress(count, nTest)
         end
     )
 end
 local tm_augm_test = tm:time().real
 
 print('Summary data augmentation *10 on '..opt.threads..' threads:')
-print(' Trainset: '..nTrain..' images takes'..tm_augm_train..' seconds .')
-print(' Testset: '..nTest..' images takes'..tm_augm_test..' seconds.')
+print(' Trainset:\t'..nTrain..' images\t'..tm_augm_train..' seconds')
+print(' Testset:\t'..nTest..' images\t'..tm_augm_test..' seconds')
 
--- local mean = torch.zeros(3, 224, 224)
--- local std  = torch.zeros(3, 224, 224)
-
-
-
+-- THE END
