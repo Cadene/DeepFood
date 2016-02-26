@@ -72,6 +72,8 @@ os.execute('mkdir -p ' .. opt.path2save)
 os.execute('echo "'..unistd.getpid()..'" > '..opt.path2save..'/pid.log')
 os.execute('echo "'..os.date():gsub(' ','')..'" > '..opt.path2save..'/launchdate.log')
 
+torch.save(opt.path2save..'/opt.t7', opt)
+
 torch.manualSeed(opt.seed)
 -- torch.setnumthreads(4) -- doesn't seem to affect anything...
 torch.setdefaulttensortype('torch.FloatTensor')
@@ -90,13 +92,14 @@ end
 
 opt.trainCache = paths.concat(opt.path2cache, 'trainCache.t7')
 opt.testCache = paths.concat(opt.path2cache, 'testCache.t7')
-opt.path2mean = paths.concat(opt.path2data, 'mean.jpg') -- sent to init_thread
-opt.path2std = paths.concat(opt.path2data, 'std.jpg')   -- sent to init_thread
+opt.path2mean = paths.concat(opt.path2data, 'mean.t7') -- sent to init_thread
+opt.path2std = paths.concat(opt.path2data, 'std.t7')   -- sent to init_thread
 
 local loadSize   = {3, opt.imageSize, opt.imageSize}
 local sampleSize = {3, opt.imageSize, opt.imageSize}
 
-if not paths.filep(opt.trainCache) and not paths.filep(testCache) then
+if not paths.filep(opt.trainCache) and not paths.filep(opt.testCache) then
+    require 'dataset'
     print('Creating train metadata')
     trainLoader = dataLoader{
         paths = {paths.concat(opt.path2data, 'train')},

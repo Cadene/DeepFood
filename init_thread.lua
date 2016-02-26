@@ -7,8 +7,8 @@ paths.dofile('dataset.lua')
 -- Setting mean std
 
 print('Loading mean and std')
-local mean = image.load(opt.path2mean)
-local std  = image.load(opt.path2std)
+local mean = torch.load(opt.path2mean)
+local std  = torch.load(opt.path2std)
 
 -------------------------------------
 -- Setting loading hook

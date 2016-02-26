@@ -105,7 +105,7 @@ for i = 1, nBatch do
 end
 pool:synchronize()
 mean = mean / nSampleReal
-torch.save(opt.path2train..'/../mean.jpg', mean)
+torch.save(opt.path2train..'/../mean.t7', mean)
 local tm_mean = tm:time().real
 
 local mean_batch = torch.Tensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
@@ -135,7 +135,7 @@ for i = 1, nBatch do
 end
 pool:synchronize()
 std = (std / nSampleReal):sqrt()
-torch.save(opt.path2train..'/../std.jpg', std)
+torch.save(opt.path2train..'/../std.t7', std)
 local tm_std = tm:time().real
 
 print('Summary mean std on '..opt.threads..' threads with batchSize='..opt.batchSize..':')
