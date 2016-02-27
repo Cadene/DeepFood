@@ -70,7 +70,7 @@ print('Saving everything to: ' .. opt.path2save)
 os.execute('mkdir -p ' .. opt.path2save)
 
 os.execute('echo "'..unistd.getpid()..'" > '..opt.path2save..'/pid.log')
-os.execute('echo "'..os.date():gsub(' ','')..'" > '..opt.path2save..'/launchdate.log')
+os.execute('echo "'..os.date()..'" > '..opt.path2save..'/launchdate.log')
 
 torch.save(opt.path2save..'/opt.t7', opt)
 
@@ -252,9 +252,9 @@ function train()
     loss_epoch = loss_epoch / opt.nBatchTrain
 
     trainLogger:add{
-        ['top1 accuracy (%)'] = top1_epoch / opt.nBatchTrain,
-        ['top5 accuracy (%)'] = top5_epoch / opt.nBatchTrain,
-        ['avg loss'] = loss_epoch / opt.nBatchTrain
+        ['top1 accuracy (%)'] = top1_epoch,
+        ['top5 accuracy (%)'] = top5_epoch,
+        ['avg loss'] = loss_epoch
     }
 
     print(string.format('Epoch: [%d][TRAINING SUMMARY] Total Time(s): %.2f\t'
@@ -365,9 +365,9 @@ function test()
     loss_epoch = loss_epoch / opt.batchSize
 
     testLogger:add{
-        ['top1 accuracy (%)'] = top1_epoch / opt.nBatchTest,
-        ['top5 accuracy (%)'] = top5_epoch / opt.nBatchTest,
-        ['avg loss'] = loss_epoch / opt.nBatchTest
+        ['top1 accuracy (%)'] = top1_epoch,
+        ['top5 accuracy (%)'] = top5_epoch,
+        ['avg loss'] = loss_epoch
     }
     print(string.format('Epoch: [%d][TESTING SUMMARY] Total Time(s): %.2f\t'
         .. 'Avg loss (per batch): %.2f \t '

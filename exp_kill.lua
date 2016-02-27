@@ -27,7 +27,8 @@ function kill(pid, idGPU)
     print('Killing processus '..pid)
     os.execute('kill -9 '..pid)
     unistd.sleep(1)
-    os.execute('rm -rf '..path..'/checkpoint/GPU'..idGPU)
+    os.execute('rm -rf '..path..'/GPU'..idGPU)
+    os.execute('rm -rf '..path..'/GPU'..idGPU..'.sh')
     os.execute('rm '..path..'/log/GPU'..idGPU..'.log')
   end
 end
@@ -48,7 +49,6 @@ if opt.pids ~= 'none' then
 end
 
 if opt.gpus ~= 'none' then
-  local path = '/home/cadene/doc/DeepFood/checkpoint'
   for _,idGPU in pairs(split(opt.gpus, ',')) do
     local folder = 'GPU'..idGPU
     local f = assert(io.open(path..'/'..folder..'/pid.log',"r"))
