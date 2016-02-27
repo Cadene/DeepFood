@@ -317,12 +317,16 @@ function trainBatch(inputsCPU, targetsCPU, threadid)
     loss_epoch = loss_epoch + loss
 
     local current_lr = config.learningRate / (1 + config.evalCounter*config.learningRateDecay)
+    local top1_avg = top1_epoch * 100 / (batch_id * opt.batchSize)
+    local top5_avg = top5_epoch * 100 / (batch_id * opt.batchSize)
+    local loss_avg = loss_epoch / batch_id
 
     print(string.format('Epoch: [%d][%d/%d]\t'
         .. 'Time(sec): Batch %.3f\tDataLoading %.3f\tLR: %.2e'
-        .. '\tLoss: %.4f\tAccuracy(%%):\tTop1 %.2f\tTop5 %.2f',
+        .. '\tLoss: %.4f (avg: %.4f)'
+        .. '\tAccuracy(%%):\tTop1 %.2f (avg: %.2f)\tTop5 %.2f (avg: %.2f)',
         epoch_id, batch_id, opt.nBatchTrain, tmBatch:time().real, 
-        dataLoadingTime, current_lr, loss, top1, top5))
+        dataLoadingTime, current_lr, loss, loss_avg, top1_avg, top5_avg))
 
     batch_id = batch_id + 1
     tmDataload:reset()
@@ -410,11 +414,15 @@ function testBatch(inputsCPU, targetsCPU, threadid)
     top1 = top1 * 100 / opt.batchSize
     top5 = top5 * 100 / opt.batchSize
 
+    local top1_avg = top1_epoch * 100 / (batch_id * opt.batchSize)
+    local top5_avg = top5_epoch * 100 / (batch_id * opt.batchSize)
+    local loss_avg = loss_epoch / batch_id
+
     print(string.format('Epoch: Testing [%d][%d/%d]\t'
         .. 'Time(sec): Batch %.3f\tDataLoading %.3f\t'
-        .. 'Loss: %.4f\tAccuracy(%%):\tTop1 %.2f\tTop5 %.2f',
+        .. 'Loss: %.4f (avg: %.4f)\tAccuracy(%%):\tTop1 %.2f (avg: %.2f)\tTop5 %.2f (avg: %.2f)',
         epoch_id, batch_id, opt.nBatchTest, tmBatch:time().real, dataLoadingTime,
-        loss, top1, top5))
+        loss, loss_avg, top1, top1_avg, top5, top5_avg))
 
     loss_epoch = loss_epoch + loss
     batch_id = batch_id + 1

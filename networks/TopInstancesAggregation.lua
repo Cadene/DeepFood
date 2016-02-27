@@ -1,10 +1,7 @@
--- compatible CUDA
-
-
-local MinMaxTopInstancesPooling, parent = torch.class('MinMaxTopInstancesPooling', 'nn.Module')
+local TopInstancesAggregation, parent = torch.class('TopInstancesAggregation', 'nn.Module')
 
 -- n: number of top instances
-function MinMaxTopInstancesPooling:__init(n)
+function TopInstancesAggregation:__init(n)
    parent.__init(self)
    self.n = n
 
@@ -12,7 +9,7 @@ function MinMaxTopInstancesPooling:__init(n)
    self.indicesMin = torch.Tensor()
 end
 
-function MinMaxTopInstancesPooling:updateOutput(input)
+function TopInstancesAggregation:updateOutput(input)
    -- backward compatibility
 
    if #(#input) == 3 then -- image
@@ -69,12 +66,12 @@ function MinMaxTopInstancesPooling:updateOutput(input)
       end
     end
   else
-    print('error in MinMaxTopInstancesPooling:updateOutput')
+    print('error in TopInstancesAggregation:updateOutput')
    end
    return self.output
 end
 
-function MinMaxTopInstancesPooling:updateGradInput(input, gradOutput)
+function TopInstancesAggregation:updateGradInput(input, gradOutput)
 
   --print('gradOutput',gradOutput)
 
@@ -110,12 +107,12 @@ function MinMaxTopInstancesPooling:updateGradInput(input, gradOutput)
       end
     end
   else
-    print('error in MinMaxTopInstancesPooling:updateGradInput')
+    print('error in TopInstancesAggregation:updateGradInput')
   end
   return self.gradInput
 end
 
-function MinMaxTopInstancesPooling:empty()
+function TopInstancesAggregation:empty()
    self.gradInput:resize()
    self.gradInput:storage():resize(0)
    self.output:resize()
@@ -126,7 +123,7 @@ function MinMaxTopInstancesPooling:empty()
    self.indicesMin:storage():resize(0)
 end
 
-function MinMaxTopInstancesPooling:__tostring__()
+function TopInstancesAggregation:__tostring__()
    local s =  string.format('%s(%d)', torch.type(self), self.n)
    return s
 end
