@@ -1,3 +1,6 @@
+# **Obsolete**, please go to [Deep6Framework](https://github.com/Cadene/Deep6Framework)
+
+
 # How to fine tune a deep convolutional networks ?
 
 > This repo contains an easy and fast way to fine tune deep networks with Torch7.
